@@ -1,0 +1,21 @@
+name: Feature request
+description: A view, probe or control the visualizer does not have.
+labels: [enhancement]
+body:
+  - type: textarea
+    id: need
+    attributes:
+      label: What you want to see or do
+      description: Describe what you are trying to inspect in the simulation, not only the control you have in mind.
+    validations:
+      required: true
+  - type: textarea
+    id: current
+    attributes:
+      label: What you tried
+      description: What the current views, probes and flags offer for this, and where they fall short.
+  - type: input
+    id: sdk-version
+    attributes:
+      label: SDK version
+      description: The release you are using.

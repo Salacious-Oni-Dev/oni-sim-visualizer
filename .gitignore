@@ -1,0 +1,24 @@
+# Build output.
+build/
+*.exe
+*.obj
+*.ilk
+*.lib
+*.exp
+
+# Recorded corpora and save blobs come from your own game: they carry the game's data, are not
+# redistributable, and do not belong in the repository.
+*.bin
+*.sav
+
+# SimDLL is loaded at runtime from a path you supply and is never committed.
+*.dll
+
+# Frames saved from the window with 's', which land in the working directory.
+simviz-*.png
+
+# Minidumps a crashing SimDLL writes into the working directory.
+SimDLL_CRASH_*.dmp
+
+# A check-suite transcript, if you keep one (`./test.sh | tee suite.log`).
+suite.log

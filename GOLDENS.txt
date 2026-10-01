@@ -1,0 +1,35 @@
+# oni-sim-visualizer check goldens -- written by ./test.sh --record
+#
+# OWNED and RELATION goldens are this repo's own output and a change to one is a
+# change somebody made here. PINNED goldens are the SIMULATION's numbers: they are
+# valid only for the sim source and corpus recorded below, and test.sh skips them
+# rather than failing when either has moved.
+#
+# input.sim.src is the git tree hash of oni-sim-replacement sim/ at the commit the DLL under
+# test was stamped with -- NOT the md5 of the DLL, which moves on every rebuild of
+# unchanged source and so skipped these arms permanently.
+input.sim.src tree:39495d93372bae0d630af5d09e80e532181bd9e8
+input.corpus.md5 5126828403a4ac1390b1785683a0baac
+owned.help 758b2e0e1de17da4657e4dba9175a51d
+owned.font eff230288e647b468a248268e2ce6dd6
+owned.uisample b176d4705318471f162c6d11897a2936
+owned.uisample.ui-0.png cdbb0a41d09d3c30eb55948dae6e977e
+owned.uisample.ui-1.png d9eb0dd86912754b26f1ce4bd2edbbea
+owned.uisample.ui-2.png 54eb909505243276fc9b594f2bd343e3
+owned.uisample.ui-3.png 7b9c0548149a448148713ca53d120bc4
+owned.uisample.ui-4-offline.png db573fef173105ea4a1e52c5f20ae1af
+owned.uisample.ui-4.png 20a497464bbca6f09a22840898bd4b06
+owned.uisample.ui-5-offline.png 62aa777e2e51d0edb4faaa2bdd1173cb
+owned.uisample.ui-5.png 62aa777e2e51d0edb4faaa2bdd1173cb
+owned.uisample.ui-6.png 09018eacdcb3016c9767b0a5398f3b79
+owned.uisample.ui-launch-attach.png 9d3a87a1791692c73cf14a1574132a61
+owned.uisample.ui-launch-corpus.png 3d20814db1fd52d6a584e66373cfb311
+owned.uisample.ui-reference.png 29efdcdff6a13ab89e0d8a635601660e
+relation.attach.attrs 48bc8617694070ef9f98c84ef745e293
+pinned.digest 90ec0efd9fd8f5816396fd353b758261
+pinned.mass 299626219.653197 kg
+pinned.stats 51e5e57ede879d914970d05c6210051d
+pinned.elements d816a72251946ecf91592c01f5251c1a
+pinned.extlist d5f1b9b2898da6d7317f0d0ca15a55db
+pinned.extattrs 0caee9f256648cebede361d9b177504a
+pinned.attrview bc8a0a378ad682e04f586089a7895161

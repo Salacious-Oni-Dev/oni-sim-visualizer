@@ -1,0 +1,60 @@
+name: Bug report
+description: The visualizer does not build, run or show the simulation as documented.
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Please do not attach a corpus. A corpus contains data from the game and must not be redistributed. Describe how you recorded it instead.
+  - type: input
+    id: sdk-version
+    attributes:
+      label: SDK version
+      description: The release of the visualizer and of oni-sim-replacement you built, for example 0.1.0-alpha.1. Both must come from the same release.
+    validations:
+      required: true
+  - type: input
+    id: game-build
+    attributes:
+      label: Game build
+      description: The build number shown on the game's main menu, for the game you recorded from or attached to.
+    validations:
+      required: true
+  - type: dropdown
+    id: source
+    attributes:
+      label: Source
+      description: What the visualizer was reading.
+      options:
+        - A recorded corpus (--corpus)
+        - A running game (--attach)
+        - Neither; it failed to build or start
+    validations:
+      required: true
+  - type: input
+    id: command
+    attributes:
+      label: Command line
+      description: The exact simviz.exe command, or the build command that failed.
+    validations:
+      required: true
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: What you did, what you expected, and what happened instead. A screenshot (the `s` key saves the frame) helps for anything visual.
+    validations:
+      required: true
+  - type: textarea
+    id: output
+    attributes:
+      label: Output
+      description: |
+        The visualizer's console output, or the build output if the build failed. If you were attached to a game, also attach that session's Player.log (on Windows, %USERPROFILE%\AppData\LocalLow\Klei\Oxygen Not Included\Player.log). Drag files into this box.
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: Optional. Windows version, and where you built it (Linux, WSL, or Windows with mingw-w64).
