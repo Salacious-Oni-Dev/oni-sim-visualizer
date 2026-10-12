@@ -1,10 +1,9 @@
 // A software framebuffer and a dependency-free PNG writer.
 //
-// The whole visualizer draws into one RGB buffer and then either blits it to a window
-// (StretchDIBits) or writes it to a PNG. That is the reason the renderer is software:
-// owning the pixels is what lets `--snapshot` run with no window and no graphics
-// context at all, which is the only way a render can be checked without a human
-// looking at a desktop.
+// The world is computed into one RGB buffer, one pixel per cell (views.h), and every PNG
+// this program writes -- plain snapshots, composed ones, and the Qt proof sheets after
+// qtui::FromQImage -- goes out through WritePng below. Owning the cell pixels is what lets
+// `--snapshot` run with no window at all; the window (Qt) draws this same buffer scaled.
 //
 // The PNG is written with STORED deflate blocks -- valid zlib, no compression, no
 // libpng and no zlib dependency. A 636x404 frame is ~775 KB, which is irrelevant for a

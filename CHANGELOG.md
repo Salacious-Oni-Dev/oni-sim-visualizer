@@ -3,6 +3,31 @@
 Notable changes to this repository, newest first. All SDK repositories share one version
 number per release; see [Compatibility](https://github.com/Salacious-Oni-Dev/oni-sdk-docs/blob/main/guides/compatibility.md).
 
+## 0.1.0-alpha.2 (2026-10-12)
+
+*Oxygen Not Included: now with actual reasons for the oxygen to be not included.*
+
+- The window is now Qt 6.8.3 (LGPLv3, linked dynamically), its one third-party library. The
+  cells are still drawn from the program's own image, nearest-neighbour; the HUD, hover card,
+  event log, legend, scale bar, cell grid and flow arrows are drawn on top at screen
+  resolution. The panels are docks, every key is also in the menus, and the start screen and
+  the F1 reference are Qt windows. The text is the bundled DejaVu fonts, so pictures come out
+  the same on every machine.
+- `build/` now holds the Qt DLLs, the MinGW runtime DLLs and `platforms/` beside
+  `simviz.exe`; `LICENSES/` holds their licences. `--qt-check` confirms the Qt half loads.
+- `build.sh` needs Qt 6.8.3 for MinGW and the POSIX-threads mingw-w64; `build.ps1` uses Qt's
+  own MinGW 13.1. Both are in the README.
+- Playing runs at the simulation's own speed, one tick per displayed frame, and the HUD's
+  timing is the whole frame (tick and render). The hover card's extension lines refresh at
+  most four times a second while playing, which took the window from about 8 to 25-30
+  frames per second on the reference colony.
+- After a seek, the HUD shows the random state the next tick will use, not a transient one.
+- "could not read corpus" now says why.
+- `test.sh`: the UI checks are now sheets of the Qt window, checked byte-identical across two
+  processes. Pinned numbers are recorded against oni-sim-replacement 0.1.0-alpha.2.
+- The README's two showcase videos are re-recorded on the Qt window and this release's
+  `SimDLL.dll`, and it has three screenshots of the window.
+
 ## 0.1.0-alpha.1 (2026-10-01)
 
 First public release.

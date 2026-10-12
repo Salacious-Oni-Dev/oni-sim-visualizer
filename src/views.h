@@ -561,6 +561,25 @@ inline Rgb DimPhase(unsigned phase) {
   }
 }
 
+// Klei's error-map colours, one per simcheck class. Deliberately the saturated primaries the
+// game uses rather than anything tuned for this palette: the point of the view is that a
+// screenshot of it and of the in-game overlay are the same picture. Shared by RenderWorld
+// and the window's legend, so the key and the cells cannot disagree.
+inline Rgb SimCheckColour(simcheck::Class cl) {
+  static const Rgb kClassColour[simcheck::kClassCount] = {
+      Rgb{18, 18, 22},     // black   -- ordinary (not pure black: a dead render must
+                           //            still be distinguishable from a clean world)
+      Rgb{230, 40, 40},    // red
+      Rgb{235, 225, 60},   // yellow
+      Rgb{60, 90, 235},    // blue
+      Rgb{128, 128, 128},  // gray
+      Rgb{60, 210, 90},    // green
+      Rgb{225, 60, 220},   // magenta
+      Rgb{70, 220, 230},   // cyan
+  };
+  return kClassColour[cl < simcheck::kClassCount ? cl : 0];
+}
+
 // Paints the world into `out`, one pixel per cell.
 inline void RenderWorld(const Session& s, View view, const Range& range, Image* out,
                         bool mass_fade = true) {
@@ -647,24 +666,13 @@ inline void RenderWorld(const Session& s, View view, const Range& range, Image* 
   // of the view is that a screenshot of it and a screenshot of the in-game overlay are the
   // same picture, and a prettier red would break that.
   if (IsSimCheckView(view)) {
-    static const Rgb kClassColour[simcheck::kClassCount] = {
-        Rgb{18, 18, 22},     // black   -- ordinary (not pure black: a dead render must
-                             //            still be distinguishable from a clean world)
-        Rgb{230, 40, 40},    // red
-        Rgb{235, 225, 60},   // yellow
-        Rgb{60, 90, 235},    // blue
-        Rgb{128, 128, 128},  // gray
-        Rgb{60, 210, 90},    // green
-        Rgb{225, 60, 220},   // magenta
-        Rgb{70, 220, 230},   // cyan
-    };
     for (int y = 0; y < h; ++y) {
       const int row = h - 1 - y;
       for (int x = 0; x < w; ++x) {
         const int cell = y * w + x;
         const simcheck::Class cl = simcheck::Classify(
             *tab.At(g->elementIdx[cell]), g->mass[cell], g->temperature[cell]);
-        out->Set(x, row, kClassColour[cl]);
+        out->Set(x, row, SimCheckColour(cl));
       }
     }
     return;

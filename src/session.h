@@ -12,6 +12,9 @@
 
 #pragma once
 
+#include <cerrno>
+#include <cstring>
+
 // FIRST, before <windows.h> anywhere in the translation unit: attach.h opens with
 // <winsock2.h>, and windows.h drags in the original winsock.h unless winsock2.h has
 // already defined _WINSOCKAPI_. Including them the other way round is a wall of
@@ -45,9 +48,15 @@ struct CorpusRecord {
   std::vector<uint8_t> payload;
 };
 
-inline bool ReadCorpus(const char* path, std::vector<CorpusRecord>* out) {
+// `why`, when given, says which way it failed. Added after one run in about six of test.sh
+// reported "could not read corpus" moments after LoadTables had opened the same file without
+// complaint -- a failure with no reason attached is one nobody can chase.
+inline bool ReadCorpus(const char* path, std::vector<CorpusRecord>* out, std::string* why = nullptr) {
   FILE* f = fopen(path, "rb");
-  if (!f) return false;
+  if (!f) {
+    if (why) *why = std::string("open failed: ") + strerror(errno);
+    return false;
+  }
   for (;;) {
     int32_t header[4];
     if (fread(header, sizeof(header), 1, f) != 1) break;
@@ -62,7 +71,13 @@ inline bool ReadCorpus(const char* path, std::vector<CorpusRecord>* out) {
     if (bytes && fread(r.payload.data(), 1, bytes, f) != bytes) break;
     out->push_back(std::move(r));
   }
+  const bool read_error = ferror(f) != 0;
+  const int err = errno;
   fclose(f);
+  if (out->empty() && why) {
+    *why = read_error ? std::string("read failed: ") + strerror(err)
+                      : std::string("no complete record in the file");
+  }
   return !out->empty();
 }
 
@@ -140,8 +155,9 @@ class Session {
       return false;
     }
     std::vector<CorpusRecord> records;
-    if (!ReadCorpus(corpus, &records)) {
-      out::Printf("could not read corpus %s\n", corpus);
+    std::string why;
+    if (!ReadCorpus(corpus, &records, &why)) {
+      out::Printf("could not read corpus %s (%s)\n", corpus, why.c_str());
       return false;
     }
     records_read_ = records.size();
@@ -225,8 +241,18 @@ class Session {
     m.state = state;
     simhost::sim_handle_message(oni_sim::ext::kSetRandomState, sizeof(m),
                                 reinterpret_cast<const uint8_t*>(&m));
+    pending_rng_ = state;
+    rng_pending_ = true;
     return true;
   }
+
+  // The random state as it WILL be when the next frame's physics runs. RandomState() reads the
+  // sim's stream now, and straight after a SetRandomState -- every --seed, every timeline start
+  // and every seek, since Restore sends one -- that is the transient state the Load or
+  // AllocateCells left, which differs run to run (it is the wall clock). The message is queued
+  // and lands ahead of the next frame's physics, so until a frame runs, the value about to be
+  // in effect is the one that was sent. The HUD shows this; the sim never reads it.
+  uint32_t ShownRandomState() const { return rng_pending_ ? pending_rng_ : RandomState(); }
 
   // Whether this DLL has the random-stream surface at all. Offline only: attached there is
   // no DLL in this process to ask.
@@ -278,6 +304,7 @@ class Session {
   // max(1, (int)((dt + carry) * 5.0)) substeps, so 0.2 is exactly one substep.
   bool Tick(float dt = 0.2f) {
     if (!booted_) return false;
+    rng_pending_ = false;  // this frame drains the queued SetRandomState (ShownRandomState)
     NewGameFrame frame{};
     frame.elapsedSeconds = dt;
     frame.minX = 0;
@@ -1429,6 +1456,9 @@ class Session {
   }
 
  private:
+  // See ShownRandomState().
+  uint32_t pending_rng_ = 0;
+  bool rng_pending_ = false;
   static int SilentHandler(int, void*) { return 0; }
 
   // Flattens the selected attribute onto the element table, so the attr view is one array

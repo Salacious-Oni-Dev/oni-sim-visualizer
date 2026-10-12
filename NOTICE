@@ -12,8 +12,14 @@ headers are read from that repository and not copied here. Running it on a recor
 corpus needs a corpus recorded from your own game, which is not part of this repository
 and must not be redistributed.
 
-No third-party source code is included. The small 5x8 font and the PNG writer are this
-project's own. The large font (--font large) is the 7x13 font of the X11 misc-fixed family
-(font-misc-misc), which is in the public domain ("Public domain font. Share and enjoy.");
-its glyphs are stored as a table in src/font.h. The program links only Windows system
-libraries (gdi32, comdlg32, ws2_32) and the mingw-w64 runtime.
+No third-party source code is included. The program's own drawing of the cells and the PNG
+writer are this project's own. Three third-party components are used, and their licences are in
+LICENSES/ (see LICENSES/THIRD-PARTY.md):
+
+- Qt 6.8.3, under the GNU Lesser General Public License v3, linked dynamically. A build puts
+  the unmodified Qt DLLs and platform plugins beside simviz.exe. Qt's source is published by
+  the Qt Project at https://download.qt.io.
+- The MinGW-w64 runtime DLLs that Qt needs: GCC's runtime libraries under GPLv3 with the GCC
+  Runtime Library Exception 3.1, and winpthreads under MIT and BSD-style terms.
+- The DejaVu fonts in assets/fonts/, compiled into simviz.exe, under the Bitstream Vera licence
+  (DejaVu's changes are public domain).

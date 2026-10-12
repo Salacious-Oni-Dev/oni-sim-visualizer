@@ -53,12 +53,11 @@
 #include "launch.h"
 #include "out.h"
 #include "panels.h"
+#include "qtapp.h"
 #include "session.h"
 #include "statedump.h"
 #include "timeline.h"
-#include "ui.h"
 #include "views.h"
-#include "window.h"
 
 namespace {
 
@@ -351,244 +350,6 @@ int DumpElements(const char* corpus) {
            e->state, static_cast<unsigned>(e->state & 3), c,
            c & 0xFF, (c >> 8) & 0xFF, (c >> 16) & 0xFF,
            (c >> 16) & 0xFF, (c >> 8) & 0xFF, c & 0xFF);
-  }
-  return 0;
-}
-
-// Prints the HUD font as text art, one glyph per block.
-//
-// This is the font's own regression check, and it is the reason the HUD is drawn with
-// an owned bitmap font instead of GDI TextOut: a glyph table typed by hand is wrong
-// somewhere, and "look at the window" is not a way to find out which entry. Every glyph
-// below was proof-read from this output.
-// The panels, composed with no window, no sim and no game -- written to a PNG so the
-// layout can be read and diffed by something other than a person looking at a desktop.
-// Exactly the argument --font-sample and `--snapshot --hud` already make: an overlay
-// nobody can inspect offline is an overlay nobody proof-reads.
-//
-// The bindings are a still life rather than a live session: a Session that has not booted
-// answers every question with a default, which would make the panels look emptier than
-// they ever are in use. These are the values a real attached session shows.
-int UiSample(const char* png_path, int width, int height) {
-  if (png_path == nullptr) {
-    out::Printf("--ui-sample writes PNGs: pass --snapshot <out.png> with it.\n");
-    return 2;
-  }
-  Image frame(width, height);
-  // A mid-grey ground rather than black, so a panel edge that is not being drawn at all
-  // can be told from one drawn in the ground colour.
-  const Rgb ground{52, 56, 64};
-
-  panels::State st;
-  st.show_column = true;
-  st.show_console = true;
-  for (int i = 0; i < 40; ++i) {
-    char line[160];
-    snprintf(line, sizeof(line),
-             "t%-5d sim.message_refused  msg 0xE4BE0717  unknown message  3072 bytes", i);
-    st.capture.lines.push_back(line);
-  }
-  st.capture.dropped = 12431;
-
-  View view = View::Temperature;
-  bool playing = true, mass_fade = true, show_hud = true, show_bar = true;
-  bool show_events = true;
-  panels::RangeMode mode = panels::RangeMode::Scan;
-  double lo = 0.0, hi = 1.0, dt = 0.2;
-  int poll_ms = 200;
-  Range range;
-  range.lo = 205.9f;
-  range.hi = 319.9f;
-  range.valid = true;
-
-  panels::Bindings b;
-  b.view = &view;
-  b.playing = &playing;
-  b.mass_fade = &mass_fade;
-  b.show_hud = &show_hud;
-  b.show_bar = &show_bar;
-  b.show_events = &show_events;
-  b.range_mode = &mode;
-  b.range_lo = &lo;
-  b.range_hi = &hi;
-  b.poll_ms = &poll_ms;
-  b.dt = &dt;
-  b.range = &range;
-  b.attached = true;
-  b.timeline_on = true;
-  b.tick = 29889;
-  b.base = 29800;
-  b.head = 29889;
-  b.fps = 251.7f;
-  b.source = "127.0.0.1:9788";
-  b.width = width;
-  b.height = height;
-  b.ext_live = true;
-  b.ext_published = true;
-  b.ext_props = "sim.gas_mass";
-  b.ext_view_name = "sim.gas_mass";
-  b.attr_view_name = "sim.molecular_mass";
-  b.event_streams = "sim.message_refused";
-  // A camera that has been MOVED, not the fit -- so the sheet proof-reads the `--camera` in
-  // the command line rather than the case where it is omitted. These are the numbers the
-  // README works through: `--zoom 8 --hover 300,200` at 1100x760 seats exactly this.
-  Camera sample_cam;
-  sample_cam.cx = 231.75f;
-  sample_cam.cy = 153.0f;
-  sample_cam.scale = 8.0f;
-  b.cam = &sample_cam;
-  b.cam_is_fit = false;
-  b.hover_valid = true;
-  b.hover_cell_x = 300;
-  b.hover_cell_y = 200;
-  bool verbose = false, replay_registrations = false;
-  int timeline_interval = 10, timeline_keep = 8;
-  b.verbose = &verbose;
-  b.replay_registrations = &replay_registrations;
-  b.timeline_interval = &timeline_interval;
-  b.timeline_keep = &timeline_keep;
-  b.dll = "..\\oni-sim-replacement\\sim\\build\\SimDLL.dll";
-  st.tests.corpus = "sim_corpus.bin";
-  st.tests.dll = b.dll;
-  st.tests.seeded = true;
-  st.tools.inject_rect = "300,200,16,16";
-  st.tools.ext_probe_rect = "300,200,16,16";
-
-  ui::Input in;
-  // A pointer parked over nothing, so no row is drawn in its hover colour and the sheet
-  // shows the resting state of every control rather than one of them lit.
-  in.mouse_x = -1;
-  in.mouse_y = -1;
-
-  const std::string p(png_path);
-  const size_t dot = p.rfind('.');
-  for (int tab = 0; tab < 7; ++tab) {
-    st.tab = tab;
-    frame.Fill(ground);
-    // Drawn twice, and this is not belt and braces. A panel's ground is painted from the
-    // height it had on the PREVIOUS frame, because an immediate-mode panel does not know
-    // how tall it is until its contents are done; at 250 fps nobody sees the first frame,
-    // but a single-frame PNG would show every panel with no ground under it at all.
-    panels::Draw(&frame, &st, &b, in);
-    panels::Draw(&frame, &st, &b, in);
-    const std::string out_path = (dot == std::string::npos ? p : p.substr(0, dot)) + "-" +
-                                 std::to_string(tab) +
-                                 (dot == std::string::npos ? std::string() : p.substr(dot));
-    if (!WritePng(frame, out_path)) {
-      out::Printf("could not write %s\n", out_path.c_str());
-      return 1;
-    }
-    out::Printf("wrote %s (tab %d)\n", out_path.c_str(), tab);
-  }
-
-  // Tabs 4 and 5 get a second sheet, offline. Only ONE of them actually changes: the tools
-  // tab does, because the world mutations and the elements dump are offline-only and its
-  // third list button reads `events list` attached and `elements` offline. The tests tab
-  // does NOT, and that is the point of drawing it twice -- every run it starts drives a
-  // corpus in this process, so a tests tab that rendered differently while attached would
-  // be offering a run it cannot make. test.sh asserts both halves: tab 4 must differ
-  // between the two sheets and tab 5 must not.
-  b.attached = false;
-  b.source = st.tests.corpus;
-  for (int tab = 4; tab <= 5; ++tab) {
-    st.tab = tab;
-    frame.Fill(ground);
-    panels::Draw(&frame, &st, &b, in);
-    panels::Draw(&frame, &st, &b, in);
-    const std::string out_path = (dot == std::string::npos ? p : p.substr(0, dot)) + "-" +
-                                 std::to_string(tab) + "-offline" +
-                                 (dot == std::string::npos ? std::string() : p.substr(dot));
-    if (!WritePng(frame, out_path)) {
-      out::Printf("could not write %s\n", out_path.c_str());
-      return 1;
-    }
-    out::Printf("wrote %s (tab %d, offline)\n", out_path.c_str(), tab);
-  }
-
-  // The reference, which is drawn over the whole window rather than in the column and so is
-  // the one piece of this UI a per-tab sheet would never show.
-  {
-    st.tab = 6;
-    st.show_reference = true;
-    frame.Fill(ground);
-    panels::Draw(&frame, &st, &b, in);
-    panels::Draw(&frame, &st, &b, in);
-    const std::string out_path = (dot == std::string::npos ? p : p.substr(0, dot)) +
-                                 "-reference" +
-                                 (dot == std::string::npos ? std::string() : p.substr(dot));
-    if (!WritePng(frame, out_path)) {
-      out::Printf("could not write %s\n", out_path.c_str());
-      return 1;
-    }
-    out::Printf("wrote %s (flag reference)\n", out_path.c_str());
-  }
-
-  // The start screen, in both of its shapes. It is drawn by the same widget layer and has the
-  // same first-frame ground problem, so it gets the same offline check.
-  launch::Spec offline;
-  offline.corpus = "sim_corpus.bin";
-  offline.dll = kDefaultDll;
-  offline.seed = "0x0BADF00D";
-  offline.ticks = 120;
-  launch::Spec live;
-  live.attach = true;
-  live.endpoint = "127.0.0.1:9788";
-  live.ext_published = true;
-  live.ext_props = "sim.gas_mass";
-  live.events = "sim.message_refused";
-  live.view = View::Temperature;
-  const struct { const char* suffix; const launch::Spec* spec; const char* error; } kScreens[] = {
-      {"-launch-corpus", &offline, ""},
-      {"-launch-attach", &live, "attach failed: connection refused by 127.0.0.1:9788"},
-  };
-  launch::g_sample_assume_files_exist = true;
-  for (const auto& sc : kScreens) {
-    Image screen;
-    launch::WriteSample(*sc.spec, sc.error, &screen);
-    const std::string out_path = (dot == std::string::npos ? p : p.substr(0, dot)) +
-                                 sc.suffix +
-                                 (dot == std::string::npos ? std::string() : p.substr(dot));
-    if (!WritePng(screen, out_path)) {
-      out::Printf("could not write %s\n", out_path.c_str());
-      return 1;
-    }
-    out::Printf("wrote %s (start screen)\n", out_path.c_str());
-  }
-  return 0;
-}
-
-int FontSample(const char* png_path) {
-  Image sheet(16 * (font::kAdvance * 2) + 8, 8 * (font::kLineH * 2) + 8);
-  sheet.Fill(HudPanel());
-  for (int i = 0; i < 95; ++i) {
-    const char text[2] = {static_cast<char>(32 + i), '\0'};
-    font::DrawString(&sheet, 4 + (i % 16) * font::kAdvance * 2,
-                     4 + (i / 16) * font::kLineH * 2, text, HudInk(), 2);
-  }
-
-  for (int base = 32; base <= 126; base += 8) {
-    const int last = base + 7 <= 126 ? base + 7 : 126;
-    out::Printf("\n");
-    for (int c = base; c <= last; ++c) out::Printf("  %c      ", static_cast<char>(c));
-    out::Printf("\n");
-    for (int row = 0; row < font::kGlyphH; ++row) {
-      for (int c = base; c <= last; ++c) {
-        const uint8_t bits = font::Glyph(static_cast<char>(c))[row];
-        for (int x = 0; x < font::kGlyphW; ++x)
-          out::Printf("%c", (bits & (1u << (font::kGlyphW - 1 - x))) ? '#' : '.');
-        out::Printf("    ");
-      }
-      out::Printf("\n");
-    }
-  }
-  out::Printf("\n");
-
-  if (png_path) {
-    if (!WritePng(sheet, png_path)) {
-      out::Printf("could not write %s\n", png_path);
-      return 1;
-    }
-    out::Printf("wrote %s (%dx%d, font sheet)\n", png_path, sheet.width(), sheet.height());
   }
   return 0;
 }
@@ -2227,6 +1988,11 @@ bool ViewPublishedLive(const Session& s, View view) {
 constexpr int kRelaunch = -2;    // the window asked for the start screen back
 constexpr int kOpenFailed = -3;  // the session could not be opened; the message is in *err
 
+}  // namespace
+
+// Outside the unnamed namespace, unlike everything around it: the window classes in src/qt/
+// hold a copy, and a class with linkage holding a member of an internal-linkage type is a
+// -Wsubobject-linkage warning on every one of them.
 struct WindowOptions {
   float dt = 0.2f;
   bool mass_fade = true;
@@ -2264,773 +2030,62 @@ struct WindowOptions {
   CameraSpec camera;
 };
 
-// The interactive loop. The sim is only advanced here -- by one tick per displayed
-// frame while playing, or one tick per press of '.' -- so a window drag, a resize or a
-// repaint can never move the simulation. That matters more than it sounds: a timeline
-// that advances when you touch the window is not reproducible even within one process.
+namespace {
+
+}  // namespace
+
+// The window. It lives in src/qt/ and is the window half of this file: those headers call the
+// tool functions above (Probe, Digest, ExtList, ...) and take WindowOptions, so they are
+// included HERE, after all of it, with the unnamed namespace closed around them -- Qt's own
+// headers must not be opened inside it. See qt/viewer.h for what moved where.
+#include "qt/launcher.h"
+#include "qt/mainwindow.h"
+
+namespace {
+
+// --ui-sample. With no source: the start screen in both of its shapes, which needs no sim and
+// so is an OWNED golden. With a source (--corpus or --attach), main() also boots it and writes
+// the whole window once per dock -- see qtui::WindowSample -- after this has run.
+int UiSample(const char* png_path) {
+  if (png_path == nullptr) {
+    out::Printf("--ui-sample writes PNGs: pass --snapshot <out.png> with it.\n");
+    return 2;
+  }
+  launch::Spec offline;
+  offline.corpus = "sim_corpus.bin";
+  offline.dll = kDefaultDll;
+  offline.seed = "0x0BADF00D";
+  offline.ticks = 120;
+  launch::Spec live;
+  live.attach = true;
+  live.endpoint = "127.0.0.1:9788";
+  live.ext_published = true;
+  live.ext_props = "sim.gas_mass";
+  live.events = "sim.message_refused";
+  live.view = View::Temperature;
+  const struct { const char* suffix; const launch::Spec* spec; const char* error; } kScreens[] = {
+      {"-launch-corpus", &offline, ""},
+      {"-launch-attach", &live, "attach failed: connection refused by 127.0.0.1:9788"},
+  };
+  launch::g_sample_assume_files_exist = true;
+  for (const auto& sc : kScreens) {
+    QImage screen;
+    const std::string out_path = qtui::SuffixedPath(png_path, sc.suffix);
+    if (!qtui::LauncherSample(*sc.spec, sc.error, &screen) ||
+        !WritePng(qtui::FromQImage(screen), out_path)) {
+      out::Printf("could not write %s\n", out_path.c_str());
+      return 1;
+    }
+    out::Printf("wrote %s (start screen)\n", out_path.c_str());
+  }
+  launch::g_sample_assume_files_exist = false;
+  return 0;
+}
+
+// The interactive loop, now Qt's. The sim is only advanced by the window's clock or by a step
+// or seek action -- a repaint, a resize or a drag can never move it (qt/viewer.h).
 int RunWindow(Session& s, View view, const WindowOptions& opt) {
-  Window win;
-  char title[512];
-  snprintf(title, sizeof(title), "oni-sim-visualizer -- %s",
-           opt.attached ? opt.endpoint.c_str() : opt.corpus);
-  if (!win.Open(title, opt.width, opt.height, opt.fullscreen)) {
-    out::Printf("could not open a window\n");
-    return 1;
-  }
-  win.SetScale(opt.ui_scale);
-
-  HudState hud;
-  hud.dt = opt.dt;
-  hud.mass_fade = opt.mass_fade;
-  hud.seed_pinned = opt.seed_pinned;
-  hud.seed = opt.seed;
-  hud.rng = s.RandomState();
-  hud.wall_clock_seeded = s.wall_clock_seeded();
-
-  // The timeline is started BEFORE the first range scan and the first render, because
-  // starting it restores tick 0 (see timeline.h) and everything drawn from here on has
-  // to be of the run that will actually be scrubbed, not of the pristine boot.
-  hud.attached = opt.attached;
-  hud.endpoint = opt.endpoint;
-  hud.watching_events = s.watching_events();
-
-  // The fetch set follows the view, so it is state of the loop rather than of the
-  // options: switching view live changes what the next poll asks the game for.
-  attach::SurfaceSet fetch =
-      opt.fetch_pinned ? opt.fetch_set : FetchSetForView(view, false);
-  // Runtime, because the live tab can pin and unpin it now. Pinned, a view change must not
-  // touch the set -- see the note on WindowOptions.
-  bool fetch_pinned = opt.fetch_pinned;
-  double next_poll = 0.0;
-  double next_event_poll = 0.0;
-
-  Timeline tl;
-  tl.Configure(opt.timeline_interval, opt.timeline_keep, opt.dt);
-  bool timeline_on = opt.timeline && !opt.attached;
-  if (timeline_on) {
-    std::string terr;
-    if (!tl.Start(s, &terr)) {
-      out::Printf("timeline off: %s\n", terr.c_str());
-      timeline_on = false;
-    } else {
-      out::Printf("timeline on: one checkpoint every %d ticks, %d kept, %.2f MB each\n",
-             tl.interval(), tl.keep(), tl.bytes() / (1024.0 * 1024.0));
-    }
-  }
-
-  // The runtime copies. Everything below can be changed from the panels while the window
-  // is open, so it cannot live in the const options the command line filled in -- but the
-  // command line is still where each one starts, which is the whole parity claim.
-  int poll_ms = opt.poll_ms;
-  double dt_seconds = opt.dt;
-  int timeline_interval = opt.timeline_interval;
-  int timeline_keep = opt.timeline_keep;
-  panels::RangeMode range_mode =
-      opt.fixed_range ? panels::RangeMode::Fixed
-                      : (opt.full_span ? panels::RangeMode::Full : panels::RangeMode::Scan);
-  double range_lo = opt.fixed.lo, range_hi = opt.fixed.hi;
-
-  Range range;
-  // One place decides what the range is, because there were three and they disagreed about
-  // what a pinned range should do on a view change.
-  auto apply_range = [&]() {
-    if (range_mode == panels::RangeMode::Fixed) {
-      range.lo = static_cast<float>(range_lo);
-      range.hi = static_cast<float>(range_hi);
-      range.valid = true;
-    } else {
-      range = ScanRange(s, view, range_mode == panels::RangeMode::Full);
-    }
-  };
-  apply_range();
-
-  Image world, frame;
-  RenderWorld(s, view, range, &world, hud.mass_fade);
-
-  Camera cam = SeatCamera(opt.camera, world.width(), world.height(), win.width(), win.height());
-  cam.Clamp(world.width(), world.height(), win.width(), win.height());
-
-  bool world_dirty = false;
-  bool show_bar = true;
-  bool scrubbing = false;
-  double message_until = 0.0;
-  double fps_window_start = NowSeconds();
-  int fps_frames = 0;
-  int saved_frames = 0;
-
-  // The panels, and the capture that gives every printing feature somewhere to print.
-  // Installing the sink here rather than in main() is deliberate: a headless run has no
-  // pane to read, so it keeps writing straight to stdout with no ring in the middle.
-  // `echo` stays on, so a windowed run launched FROM a shell still fills that shell.
-  // The view the panel dropdown is showing. A separate variable rather than a direct write
-  // to `view`, so a panel switch goes through the SAME availability check the number keys
-  // do -- picking `flow` from a list when the DLL publishes no flow texture must refuse and
-  // say so, exactly as pressing 5 does, not paint an empty world.
-  View panel_view = view;
-
-  // Steps and a PNG asked for by a BUTTON. The panels are drawn after this frame has already
-  // advanced and composed, so a step from a button belongs to the next frame; a snapshot,
-  // by contrast, wants the frame the panels are on and is taken a few lines below them.
-  int pending_steps = 0;
-  bool save_png_now = false;
-  // Set by the source tab. Read once, at the bottom of the loop, rather than acted on where
-  // it is set: the panels are drawn into a frame that has not been presented yet, and tearing
-  // the session down mid-frame would leave that frame half drawn on screen.
-  bool relaunch = false;
-
-  // The experiments, which run as a child process rather than in here. See child.h: each one
-  // rewrites the world dozens of times, they take seconds to minutes, and one of them is a
-  // crash repro. `test_status` is the one line the tests tab shows about the last run.
-  Child child;
-  std::string test_status;
-
-  panels::State panel;
-  panel.capture.echo = true;
-  out::SetSink(&panel.capture);
-  struct SinkGuard {
-    ~SinkGuard() {
-      out::Flush();
-      out::SetSink(nullptr);
-    }
-  } sink_guard;
-
-  auto seek = [&](int target) {
-    if (!timeline_on) return;
-    std::string err;
-    if (!tl.Seek(s, target, &err)) {
-      hud.playing = false;
-      hud.message = "seek failed: " + err;
-      message_until = NowSeconds() + 8.0;
-    }
-    world_dirty = true;
-  };
-
-  // A world-changing tool has run. The scrub timeline's checkpoints now describe a world that
-  // no longer happened -- seeking back into one would show a history that is not this run's --
-  // so the timeline is re-anchored at the tick the change landed on. That is exactly what the
-  // command line does by ordering --inject-gas and --ext-probe BEFORE the timeline is started;
-  // this is the same rule, applied at a point in time instead of a point in argv.
-  auto reanchor = [&](const char* what) {
-    world_dirty = true;
-    if (!timeline_on) return;
-    std::string terr;
-    if (!tl.Start(s, &terr)) {
-      out::Printf("  timeline off: %s\n", terr.c_str());
-      timeline_on = false;
-      return;
-    }
-    out::Printf("  timeline re-anchored at tick %d -- %s changed the world, so every "
-           "checkpoint before it\n  describes one that no longer happened\n",
-           s.ticks(), what);
-  };
-
-  // Two lists, for the same reason the on-screen help has two: attached there is no
-  // history to move through, so the keys that move through it are not offered. A console
-  // line that names a key which does nothing is worse than a shorter one.
-  // 8 and 9 are offered only when a name was given for them, because that is the only case
-  // where either does anything -- see the key handler. The attached line used to omit
-  // `eight` while the key still worked, which is the same "names a key that does nothing"
-  // failure this comment argues against, run backwards.
-  const char* eight = s.ext_view_name().empty() ? "" : ", 8 ext";
-  const char* nine = s.attr_view_name().empty() ? "" : ", 9 attr";
-  if (opt.attached) {
-    out::Printf("window open on %s. keys: space follow/hold, '.' poll one frame,\n"
-           "  1-7 view%s%s, r rescan range, f fit, +/- zoom, arrows or drag to pan,\n"
-           "  m mass fade, h hud, s save png, tab panels, ` output pane,\n"
-           "  F1 the flag reference, esc quit.\n"
-           "  Polling every %d ms while\n"
-           "  following; switching view re-asks the game for that view's arrays.\n",
-           opt.endpoint.c_str(), eight, nine, opt.poll_ms);
-  } else {
-    out::Printf("window open. keys: space play/pause, '.' step, ',' step back, [ ] ten ticks,\n"
-           "  home/end ends of history, t timeline bar, 1-7 view%s%s, r rescan range,\n"
-           "  f fit, +/- zoom, arrows or drag to pan, m mass fade, h hud, s save png,\n"
-           "  tab panels, ` output pane, F1 the flag reference, esc quit.\n", eight, nine);
-  }
-
-  while (win.Pump()) {
-    // ---- the child experiment, if one is running. Drained every frame rather than waited
-    // on: a blocking read would stop the window for as long as the child was thinking, which
-    // is the thing running it out of process was for.
-    if (child.running() && child.Poll(&panel.capture)) {
-      char msg[96];
-      snprintf(msg, sizeof(msg), "finished, exit code %lu",
-               static_cast<unsigned long>(child.exit_code()));
-      test_status = msg;
-      out::Printf("---- %s\n", msg);
-    }
-
-    // ---- input
-    // Two gates over the raw window state, and both are load-bearing.
-    //
-    // `typing` is true while a panel text field has focus. Without it, typing a property
-    // name into the ext field would also toggle mass fade on the 'm', save a PNG on the 's'
-    // and quit on the escape that was meant to abandon the edit.
-    //
-    // `over_ui` keeps the camera from reading a drag or a wheel notch that belonged to a
-    // panel. It uses the panel rectangles from the PREVIOUS frame -- see panels.h for why
-    // that is one frame late on purpose.
-    const bool typing = panel.ui.focus != 0;
-    const bool over_ui = panel.WantsMouse(win.mouse_x(), win.mouse_y());
-    auto pressed = [&](int vk) { return !typing && win.pressed(vk); };
-    auto press_count = [&](int vk) { return typing ? 0 : win.press_count(vk); };
-    auto held = [&](int vk) { return !typing && win.held(vk); };
-    auto wheel = [&]() { return (typing || over_ui) ? 0 : win.wheel(); };
-    int steps = 0;
-    // Escape closes the reference before it closes the program. A full-window overlay that
-    // ignores the key everyone presses to dismiss things is a pitfall.
-    if (pressed(VK_ESCAPE)) {
-      if (panel.show_reference) panel.show_reference = false;
-      else break;
-    }
-    if (pressed(VK_F1)) panel.show_reference = !panel.show_reference;
-    if (pressed(VK_SPACE)) hud.playing = !hud.playing;
-
-    steps = press_count(VK_OEM_PERIOD) + pending_steps;
-    pending_steps = 0;
-    if (pressed('H')) hud.show = !hud.show;
-    if (pressed('E') && hud.watching_events) {
-      hud.events = !hud.events;
-      hud.message = hud.events ? "event log shown" : "event log hidden";
-      message_until = NowSeconds() + 2.0;
-    }
-    if (pressed('T')) show_bar = !show_bar;
-    if (win.pressed(VK_TAB) && !typing) panel.show_column = !panel.show_column;
-    if (win.pressed(VK_OEM_3) && !typing) panel.show_console = !panel.show_console;
-
-    // Backwards motion is always a seek; forwards motion is a tick when it is at the
-    // head of history and a seek when it is behind, because a checkpoint near the
-    // target beats replaying the whole way there.
-    if (timeline_on) {
-      const int back = press_count(VK_OEM_COMMA);
-      if (back > 0) seek(s.ticks() - back);
-      for (int i = 0, n = press_count(VK_OEM_4); i < n; ++i) seek(s.ticks() - 10);
-      for (int i = 0, n = press_count(VK_OEM_6); i < n; ++i) {
-        if (s.ticks() >= tl.head()) steps += 10;
-        else seek(s.ticks() + 10);
-      }
-      if (pressed(VK_HOME)) seek(tl.base());
-      if (pressed(VK_END)) seek(tl.head());
-    }
-
-    View next_view = panel_view != view ? panel_view : view;
-    if (pressed('1')) next_view = View::Element;
-    if (pressed('2')) next_view = View::Temperature;
-    if (pressed('3')) next_view = View::Mass;
-    if (pressed('4')) next_view = View::Phase;
-    if (pressed('5')) next_view = View::Flow;
-    if (pressed('6')) next_view = View::Liquid;
-    if (pressed('7')) next_view = View::Sunlight;
-    // 8 only does something when --view ext:<name> named a property. Without one there is
-    // nothing for it to show and the key is inert rather than switching to a blank view.
-    if (pressed('8') && !s.ext_view_name().empty()) next_view = View::Ext;
-    // 9 is the same bargain for the other registry.
-    if (pressed('9') && !s.attr_view_name().empty()) next_view = View::Attr;
-    // 0 is Klei's error map. Always available -- it needs nothing the base three arrays and
-    // the element table do not already carry, in either mode.
-    if (pressed('0')) next_view = View::SimCheck;
-    // A texture view over a buffer the DLL does not publish would paint an empty world and
-    // look like a sim with nothing in it. Refused with a message instead.
-    //
-    // Live the question is asked of the SERVER's surface list, not of the current frame's
-    // pointers: those are null for every texture the last poll did not happen to ask for,
-    // which is most of them, so testing them would refuse every switch.
-    const bool next_available = opt.attached ? ViewPublishedLive(s, next_view)
-                                             : ViewAvailableIn(s, next_view);
-    if (next_view != view && !next_available) {
-      hud.message =
-          next_view == View::Ext
-              ? "no extension property named \"" + s.ext_view_name() + "\" is carried"
-              : next_view == View::Attr
-                    ? "no element in this table carries \"" + s.attr_view_name() + "\""
-                    : std::string(opt.attached ? "this game publishes no "
-                                               : "this DLL publishes no ") +
-                          ViewName(next_view) + " texture";
-      message_until = NowSeconds() + 4.0;
-      next_view = view;
-    }
-    if (next_view != view) {
-      view = next_view;
-      // Live, the new view's arrays are very likely not in the frame that is on screen:
-      // the poll before the switch asked for the old view's. Re-ask immediately, and
-      // only then rescan -- a range scanned over a frame that lacks the array would be
-      // scanned over mass, and would be wrong for the view that is now selected.
-      if (opt.attached && !fetch_pinned) {
-        fetch = FetchSetForView(view, false);
-        std::string perr;
-        if (!s.Poll(fetch, &perr)) {
-          hud.playing = false;
-          hud.message = "poll failed: " + perr;
-          message_until = NowSeconds() + 8.0;
-        }
-        next_poll = NowSeconds() + poll_ms / 1000.0;
-      }
-      // Rescan on a view change: a temperature band means nothing to the mass view, and
-      // carrying one over paints a single flat colour.
-      apply_range();
-      world_dirty = true;
-    }
-    // Whether the switch was taken or refused, the dropdown now shows what is actually
-    // drawn. A list that keeps displaying a refused choice is a list that lies.
-    panel_view = view;
-
-    if (pressed('R')) {
-      apply_range();
-      world_dirty = true;
-      hud.message = "range rescanned";
-      message_until = NowSeconds() + 2.0;
-    }
-    if (pressed('M')) {
-      hud.mass_fade = !hud.mass_fade;
-      world_dirty = true;
-      hud.message = hud.mass_fade ? "mass fade on" : "mass fade off";
-      message_until = NowSeconds() + 2.0;
-    }
-
-    if (pressed('F') || win.resized()) {
-      cam.FitTo(world.width(), world.height(), win.width(), win.height());
-      win.clear_resized();
-    }
-
-    // Zoom about the pointer when there is one, otherwise about the window centre.
-    const int zoom_at_x = win.mouse_x() >= 0 ? win.mouse_x() : win.width() / 2;
-    const int zoom_at_y = win.mouse_y() >= 0 ? win.mouse_y() : win.height() / 2;
-    // Every notch and every press applies, rather than one per frame: zoom is the one
-    // control where a dropped repeat is visible as the wrong magnification.
-    for (int i = 0, n = wheel(); i < n; ++i)
-      cam.ZoomAt(zoom_at_x, zoom_at_y, 1.25f, kMinScale, kMaxScale);
-    for (int i = 0, n = -wheel(); i < n; ++i)
-      cam.ZoomAt(zoom_at_x, zoom_at_y, 0.8f, kMinScale, kMaxScale);
-    for (int i = 0, n = press_count(VK_OEM_PLUS) + press_count(VK_ADD); i < n; ++i)
-      cam.ZoomAt(zoom_at_x, zoom_at_y, 1.25f, kMinScale, kMaxScale);
-    for (int i = 0, n = press_count(VK_OEM_MINUS) + press_count(VK_SUBTRACT);
-         i < n; ++i)
-      cam.ZoomAt(zoom_at_x, zoom_at_y, 0.8f, kMinScale, kMaxScale);
-
-    // Grab the scrub bar. The grab is latched on the button-down edge and held until
-    // the button comes up, so dragging along the bar scrubs continuously and dragging
-    // OFF the bar keeps scrubbing rather than snapping the world into a pan halfway
-    // through the gesture.
-    hud.left_inset = panel.show_column ? panels::ColumnW() : 0;
-    const TimelineBar bar = TimelineBarRect(win.width(), win.height(), hud.left_inset);
-    const bool bar_shown = timeline_on && show_bar && hud.show;
-    if (bar_shown && !over_ui && win.clicked() &&
-        TimelineHit(bar, win.click_x(), win.click_y())) {
-      scrubbing = true;
-    }
-    if (!win.mouse_down()) scrubbing = false;
-    if (scrubbing && win.mouse_x() >= 0) {
-      const int target = TimelineXToTick(bar, win.mouse_x(), tl.base(), tl.head());
-      if (target != s.ticks()) seek(target);
-    }
-
-    const int pan_step = 12;
-    if (held(VK_LEFT)) cam.PanByScreen(pan_step, 0);
-    if (held(VK_RIGHT)) cam.PanByScreen(-pan_step, 0);
-    if (held(VK_UP)) cam.PanByScreen(0, pan_step);
-    if (held(VK_DOWN)) cam.PanByScreen(0, -pan_step);
-    if (!scrubbing && !over_ui && (win.drag_dx() || win.drag_dy()))
-      cam.PanByScreen(win.drag_dx(), win.drag_dy());
-    cam.Clamp(world.width(), world.height(), win.width(), win.height());
-
-    // ---- advance
-    if (opt.attached) {
-      // Following is paced by the clock, not by the display: the game runs at its own
-      // speed and asking it for the same frame sixty times a second would cost it a
-      // main-thread copy sixty times a second for one picture. '.' always polls now,
-      // whether following or held.
-      const double now = NowSeconds();
-      const bool due = hud.playing && now >= next_poll;
-      const int asked = steps + (due ? 1 : 0);
-      for (int i = 0; i < asked; ++i) {
-        const double t0 = NowSeconds();
-        std::string perr;
-        if (!s.Poll(fetch, &perr)) {
-          // A failed poll leaves the previous frame on screen -- attach.h validates a
-          // whole reply before it publishes a pointer -- so this reports and stops
-          // following rather than blanking the window. The game being paused, or mid
-          // load, is a normal reason to get here.
-          hud.playing = false;
-          hud.message = "poll failed: " + perr;
-          message_until = NowSeconds() + 8.0;
-          break;
-        }
-        hud.last_tick_ms = static_cast<float>((NowSeconds() - t0) * 1000.0);
-        world_dirty = true;
-      }
-      if (due) next_poll = NowSeconds() + poll_ms / 1000.0;
-      hud.unity_frame = s.source().unity_frame();
-      hud.poll_bytes = s.source().last_bytes();
-
-      // Drained on the same schedule as the frame, and DELIBERATELY NOT gated on `due`. The
-      // route accumulates between polls precisely so a client can be slower than the game, so
-      // draining rarely is cheap and correct -- but draining only while FOLLOWING would mean a
-      // paused-and-looking session silently stopped collecting, and the buffer would age out
-      // under it. A held session still wants to know what the game refused while it looked.
-      if (s.watching_events() && now >= next_event_poll) {
-        s.PollEvents();
-        next_event_poll = NowSeconds() + poll_ms / 1000.0;
-      }
-    } else {
-      // ---- simulate
-      for (int i = 0, n = hud.playing ? 1 : steps; i < n; ++i) {
-        const double t0 = NowSeconds();
-        if (!s.Tick(dt_seconds)) {
-          out::Printf("tick %d failed: PrepareGameData returned null\n", s.ticks());
-          hud.playing = false;
-          hud.message = "TICK FAILED -- the sim refused PrepareGameData";
-          message_until = NowSeconds() + 60.0;
-          break;  // a refused frame is not something to retry for the rest of the batch
-        } else {
-          hud.last_tick_ms = static_cast<float>((NowSeconds() - t0) * 1000.0);
-          if (timeline_on) tl.Note(s);
-          world_dirty = true;
-        }
-      }
-    }
-
-    // ---- draw
-    if (world_dirty || world.empty()) {
-      RenderWorld(s, view, range, &world, hud.mass_fade);
-      // Beside the render and not in the draw loop: the export copies every written
-      // extension property out of the sim, so it is paid once per DISPLAYED FRAME rather
-      // than once per redraw. The hover card reads whatever this last left.
-      s.RefreshExtProps();
-      // Registry 2 only while the attr view is the one on screen. It is cheap -- a few
-      // kilobytes -- but attached it is still an HTTP round trip, and the window already
-      // makes one per poll; a second one per frame for a registry nothing on screen is
-      // reading would be paid for nothing. Every other reader of it (--ext-attrs, the
-      // tools tab) fetches for itself, so nothing goes stale by this being conditional.
-      if (IsAttrView(view)) s.RefreshExtAttrs();
-      world_dirty = false;
-    }
-    if (frame.width() != win.width() || frame.height() != win.height()) {
-      frame.Reset(win.width(), win.height());
-    }
-    hud.rng = s.RandomState();
-    hud.mouse_x = win.mouse_x();
-    hud.mouse_y = win.mouse_y();
-    // Over a panel the card would be composed first and painted over by it: no card there.
-    if (panel.WantsMouse(hud.mouse_x, hud.mouse_y)) hud.mouse_x = hud.mouse_y = -1;
-    hud.timeline = bar_shown;
-    if (bar_shown) {
-      hud.base = tl.base();
-      hud.head = tl.head();
-      hud.cp_interval = tl.interval();
-      hud.cp_bytes = tl.bytes();
-      hud.cp_ticks = tl.checkpoint_ticks();
-      hud.branched = tl.branched();
-      // Suppress the hover readout over the bar: a cell box popping up on top of the
-      // control being dragged hides the thing being aimed at.
-      if (TimelineHit(bar, hud.mouse_x, hud.mouse_y)) hud.mouse_x = hud.mouse_y = -1;
-    }
-    if (!hud.message.empty() && NowSeconds() > message_until) hud.message.clear();
-
-    ComposeFrame(s, view, range, cam, hud, world, &frame);
-
-    if (pressed('S')) save_png_now = true;
-
-    // ---- panels, drawn over the composed frame
-    //
-    // Last, so nothing paints over a control, and so the pane shows everything this frame
-    // printed. The one-shot requests below are acted on immediately rather than next frame:
-    // a button that takes a frame to respond feels broken at any frame rate.
-    {
-      ui::Input in;
-      in.mouse_x = win.mouse_x();
-      in.mouse_y = win.mouse_y();
-      in.clicked = win.clicked();
-      in.click_x = win.click_x();
-      in.click_y = win.click_y();
-      in.mouse_down = win.mouse_down();
-      in.wheel = over_ui ? win.wheel() : 0;
-      in.typed = win.typed();
-      in.key_left = win.key_repeats(VK_LEFT);
-      in.key_right = win.key_repeats(VK_RIGHT);
-      in.key_home = win.key_repeats(VK_HOME);
-      in.key_end = win.key_repeats(VK_END);
-      in.key_delete = win.key_repeats(VK_DELETE);
-      // The arrow keys pan the camera and move a caret, and only one of those can be true
-      // at a time. While a field has focus the caret wins; the pan handler above is already
-      // gated on the same flag.
-      if (!typing) {
-        in.key_left = in.key_right = in.key_home = in.key_end = in.key_delete = 0;
-      }
-
-      panels::Bindings b;
-      b.view = &panel_view;
-      b.playing = &hud.playing;
-      b.mass_fade = &hud.mass_fade;
-      b.show_hud = &hud.show;
-      b.show_bar = &show_bar;
-      b.show_events = &hud.events;
-      b.range_mode = &range_mode;
-      b.range_lo = &range_lo;
-      b.range_hi = &range_hi;
-      b.poll_ms = &poll_ms;
-      b.dt = &dt_seconds;
-      b.session = &s;
-      b.range = &range;
-      b.attached = opt.attached;
-      b.timeline_on = timeline_on;
-      b.fetch_pinned = fetch_pinned;
-      b.fetch_arrays = fetch_pinned ? fetch.Query() : std::string();
-      b.tick = s.ticks();
-      b.base = timeline_on ? tl.base() : 0;
-      b.head = timeline_on ? tl.head() : 0;
-      b.fps = hud.fps;
-      b.source = opt.attached ? opt.endpoint : std::string(opt.corpus);
-      b.seed_pinned = opt.seed_pinned;
-      b.seed = opt.seed;
-      b.width = win.client_width();
-      b.height = win.client_height();
-      b.ui_scale = win.scale();
-      b.fullscreen = opt.fullscreen;
-      // The camera, and whether it is still the one opening the world produced. Compared
-      // against a fresh `FitTo` rather than tracked by a flag -- see the Bindings comment.
-      b.cam = &cam;
-      {
-        Camera fit;
-        fit.FitTo(world.width(), world.height(), win.width(), win.height());
-        b.cam_is_fit = cam.Equals(fit);
-      }
-      {
-        const HoverInfo h = HoverAt(s, cam, hud.mouse_x, hud.mouse_y);
-        b.hover_valid = h.valid;
-        b.hover_cell_x = h.x;
-        b.hover_cell_y = h.y_img;
-      }
-      b.owner = win.hwnd();
-      b.verbose = &s.verbose;
-      b.replay_registrations = &s.replay_registrations;
-      b.timeline_interval = &timeline_interval;
-      b.timeline_keep = &timeline_keep;
-      b.test_running = child.running();
-      b.test_status = test_status;
-      b.ext_live = s.ext_live();
-      b.ext_published = s.ext_published();
-      b.ext_view_name = s.ext_view_name();
-      b.attr_view_name = s.attr_view_name();
-      b.event_streams = s.event_streams();
-
-      panels::Draw(&frame, &panel, &b, in);
-
-      if (b.want_rescan) {
-        apply_range();
-        world_dirty = true;
-      }
-      if (b.want_fit) cam.FitTo(world.width(), world.height(), win.width(), win.height());
-      if (b.want_step) {
-        if (timeline_on && s.ticks() < tl.head()) seek(s.ticks() + 1);
-        else ++pending_steps;
-      }
-      if (b.want_step_back && timeline_on) seek(s.ticks() - 1);
-      if (b.want_home && timeline_on) seek(tl.base());
-      if (b.want_end && timeline_on) seek(tl.head());
-      if (b.want_ext_apply) {
-        s.SetExtView(b.ext_view_name, s.ext_view_comp());
-        if (opt.attached) {
-          s.set_ext_live(b.ext_live || b.ext_published);
-          s.set_ext_published(b.ext_published, b.ext_props);
-        }
-        world_dirty = true;
-      }
-      if (b.want_attr_apply) {
-        // Fetched here and not left to the draw loop's conditional refresh: the name was
-        // just typed, and the VIEW tab has to be able to say whether it names anything
-        // before anyone switches to a view that would otherwise be refused.
-        s.SetAttrView(b.attr_view_name, s.attr_view_comp());
-        s.RefreshExtAttrs();
-        world_dirty = true;
-      }
-      if (b.want_events_apply && opt.attached) {
-        s.set_event_streams(b.event_streams);
-        hud.watching_events = s.watching_events();
-        next_event_poll = 0.0;
-      }
-      if (b.want_snapshot) save_png_now = true;
-      if (b.want_relaunch) relaunch = true;
-
-      // ---- the tools tab. Each of these is one flag, run against the world that is on
-      // screen, and each reports by printing -- which is why the output pane exists. Nothing
-      // here changes what is drawn except the two mutations at the end, which say so.
-      if (b.want_probe) {
-        int px = 0, py = 0, pw = 1, ph = 1;
-        if (ParseProbe(panel.tools.probe_rect.c_str(), &px, &py, &pw, &ph)) {
-          Probe(s, px, py, pw, ph);
-        } else {
-          out::Printf("probe wants x,y or x,y,w,h -- got \"%s\"\n",
-                 panel.tools.probe_rect.c_str());
-        }
-      }
-      if (b.want_stats) PrintQuantiles(s, view);
-      if (b.want_digest) Digest(s);
-      if (b.want_ext_list) ExtList(s);
-      if (b.want_ext_attrs) AttrList(s);
-      if (b.want_events_list) EventsList(s);
-      if (b.want_dump_elements) DumpElements(opt.corpus);
-      if (b.want_dump_state) {
-        const std::string source = opt.attached ? opt.endpoint : std::string(opt.corpus);
-        if (!DumpState(s, panel.tools.dump_state_path.c_str(), source))
-          out::Printf("could not write %s\n", panel.tools.dump_state_path.c_str());
-      }
-      if (b.want_ext_blob) {
-        const std::vector<uint8_t> blob = s.ExtCellStateBlob();
-        FILE* f = fopen(panel.tools.ext_blob_path.c_str(), "wb");
-        if (f == nullptr) {
-          out::Printf("cannot write %s\n", panel.tools.ext_blob_path.c_str());
-        } else {
-          if (!blob.empty()) fwrite(blob.data(), 1, blob.size(), f);
-          fclose(f);
-          out::Printf("wrote %zu extension-blob bytes to %s\n", blob.size(),
-                 panel.tools.ext_blob_path.c_str());
-        }
-      }
-      if (b.want_inject) {
-        int ix = 0, iy = 0, iw = 0, ih = 0;
-        if (!ParseFour(panel.tools.inject_rect.c_str(), &ix, &iy, &iw, &ih)) {
-          out::Printf("inject wants x,y,w,h -- got \"%s\"\n",
-                 panel.tools.inject_rect.c_str());
-        } else {
-          const int n = s.InjectGasRect(ix, iy, iw, ih,
-                                        static_cast<float>(panel.tools.inject_fraction));
-          if (n < 0) {
-            out::Printf("the sim refused a zero-length frame while draining the injection\n");
-          } else if (n == 0) {
-            out::Printf("seeded nothing: no gas cell with mass in %d,%d %dx%d\n", ix, iy, iw,
-                   ih);
-          } else {
-            out::Printf("injected %d gas cells (%.0f%% of each cell's vanilla mass) into the "
-                   "volume-fractions layer\n", n, panel.tools.inject_fraction * 100.0);
-            reanchor("the gas injection");
-          }
-        }
-      }
-      if (b.want_ext_probe) {
-        int ex = 0, ey = 0, ew = 0, eh = 0;
-        if (!ParseFour(panel.tools.ext_probe_rect.c_str(), &ex, &ey, &ew, &eh)) {
-          out::Printf("the thermal bonus wants x,y,w,h -- got \"%s\"\n",
-                 panel.tools.ext_probe_rect.c_str());
-        } else {
-          const int n = s.WriteThermalBonusRect(ex, ey, ew, eh,
-                                                static_cast<float>(panel.tools.ext_probe_jk));
-          if (n <= 0) {
-            out::Printf("wrote nothing into %d,%d %dx%d\n", ex, ey, ew, eh);
-          } else {
-            out::Printf("ext probe: wrote %.0f J/K into %d cells; checkpoint component is now "
-                   "%zu bytes\n", panel.tools.ext_probe_jk, n, s.ExtCellState().size());
-            reanchor("the thermal-bonus write");
-          }
-        }
-      }
-      if (b.want_timeline_config) {
-        tl.Configure(timeline_interval, timeline_keep, static_cast<float>(dt_seconds));
-        out::Printf("timeline: one checkpoint every %d ticks, %d kept -- from the next "
-               "capture on\n", tl.interval(), tl.keep());
-      }
-
-      // ---- the tests tab.
-      if (b.want_test_run && !child.running()) {
-        std::string cerr;
-        if (child.Start(panels::TestCommand(panel.tests), &cerr)) {
-          test_status = "running";
-          out::Printf("\n---- %s\n", child.command().c_str());
-        } else {
-          test_status = cerr;
-          out::Printf("%s\n", cerr.c_str());
-        }
-      }
-      if (b.want_reference) panel.show_reference = !panel.show_reference;
-      if (b.want_font_sample) FontSample("simviz-font.png");
-      if (b.want_ui_sample) UiSample("simviz-ui.png", win.width(), win.height());
-
-      // --attach-arrays, live. An empty list unpins and goes back to following the view; a
-      // bad name is refused by name rather than quietly fetching less than was asked for,
-      // which is how a missing array gets read as a missing feature.
-      if (b.want_arrays_apply && opt.attached) {
-        if (b.fetch_arrays.empty()) {
-          fetch_pinned = false;
-          fetch = FetchSetForView(view, false);
-          out::Printf("array set follows the view again: %s\n", fetch.Query().c_str());
-        } else {
-          attach::SurfaceSet wanted;
-          std::string aerr;
-          if (!wanted.ParseList(b.fetch_arrays, &aerr)) {
-            out::Printf("--attach-arrays: %s\n", aerr.c_str());
-          } else {
-            // The three every reader dereferences without checking, added silently rather
-            // than refused: asking for `mass` alone is a reasonable thing to type and a
-            // crash is not a reasonable answer to it.
-            wanted.Add(attach::kElementIdx);
-            wanted.Add(attach::kMass);
-            wanted.Add(attach::kTemperature);
-            fetch = wanted;
-            fetch_pinned = true;
-            out::Printf("array set pinned to %zu: %s\n", fetch.size(),
-                   fetch.Query().c_str());
-          }
-        }
-        std::string perr;
-        if (!s.Poll(fetch, &perr)) out::Printf("poll failed: %s\n", perr.c_str());
-        world_dirty = true;
-      }
-
-      if (b.want_test_stop && child.running()) {
-        child.Stop();
-        test_status = "stopped";
-        out::Printf("---- stopped\n");
-      }
-    }
-
-    if (save_png_now) {
-      save_png_now = false;
-      char path[128];
-      snprintf(path, sizeof(path), "simviz-%s-t%d-%d.png", ViewName(view), s.ticks(),
-               saved_frames++);
-      if (WritePng(frame, path)) {
-        out::Printf("wrote %s\n", path);
-        hud.message = std::string("wrote ") + path;
-      } else {
-        hud.message = std::string("could not write ") + path;
-      }
-      message_until = NowSeconds() + 3.0;
-    }
-
-    win.Present(frame);
-    if (relaunch) break;
-
-    // ---- pacing
-    ++fps_frames;
-    const double now = NowSeconds();
-    if (now - fps_window_start >= 0.5) {
-      hud.fps = static_cast<float>(fps_frames / (now - fps_window_start));
-      fps_frames = 0;
-      fps_window_start = now;
-    }
-    // Paused, the loop has nothing to do but redraw the same frame; a millisecond of
-    // sleep keeps that from burning a core. Playing, the tick sets the pace -- except
-    // live, where the pace is the poll interval and the frames between polls are the
-    // same redraw, so the same millisecond applies.
-    if (!hud.playing || opt.attached) Sleep(1);
-  }
-
-  // A child whose output nobody will read again. Killed rather than orphaned: its stdout is
-  // a pipe this process is about to close, so leaving it running would leave a process
-  // writing into nothing until it filled the buffer and blocked forever.
-  if (child.running()) child.Stop();
-
-  if (timeline_on) {
-    out::Printf("timeline: head %d, %zu checkpoints every %d ticks (%.1f MB), %d thins,\n"
-           "  %d seeks replaying %d ticks\n",
-           tl.head(), tl.count(), tl.interval(), tl.bytes() / (1024.0 * 1024.0),
-           tl.thins(), tl.seeks(), tl.replayed_ticks());
-  }
-  if (opt.attached) {
-    out::Printf("window closed after %d polls of %s\n", s.ticks(), opt.endpoint.c_str());
-  } else {
-    out::Printf("window closed after %d ticks\n", s.ticks());
-  }
-  return relaunch ? kRelaunch : 0;
+  return qtui::RunQtWindow(s, view, opt);
 }
 
 // ---------------------------------------------------------------------------------------
@@ -3172,7 +2227,7 @@ int OpenAndRun(const launch::Spec& spec, std::string* err) {
 int LauncherLoop(launch::Spec spec) {
   std::string err;
   for (;;) {
-    if (!launch::RunLauncher(&spec, err)) return 0;
+    if (!qtui::RunQtLauncher(&spec, err)) return 0;
     err.clear();
     const int rc = OpenAndRun(spec, &err);
     if (rc == kRelaunch || rc == kOpenFailed) continue;
@@ -3262,7 +2317,7 @@ int main(int argc, char** argv) {
   // registry 1, and the same "nothing is registered before a boot" rule applies.
   std::string attr_view_name;
   int attr_view_comp = 0;
-  bool windowed = false, hud_snapshot = false, font_sample = false;
+  bool windowed = false, hud_snapshot = false;
   bool ui_sample = false;
   int checkpoint_span = 0;
   int timeline_span = 0;
@@ -3350,8 +2405,8 @@ int main(int argc, char** argv) {
       load_stress_ticks = atoi(argv[++i]);
     }
     else if (!strcmp(a, "--hud")) hud_snapshot = true;
-    else if (!strcmp(a, "--font-sample")) font_sample = true;
     else if (!strcmp(a, "--ui-sample")) ui_sample = true;
+    else if (!strcmp(a, "--qt-check")) return qtapp::Check();
     else if (!strcmp(a, "--verbose")) verbose = true;
     else if (!strcmp(a, "--stats")) stats = true;
     else if (!strcmp(a, "--digest")) digest = true;
@@ -3399,8 +2454,7 @@ int main(int argc, char** argv) {
         out::Printf("--font wants large (7x13) or small (5x8, the default)\n");
         return 2;
       }
-      font::UseLarge(!strcmp(which, "large"));
-      ui::SyncFontMetrics();
+      qtapp::g_large_font = !strcmp(which, "large");
     } else if (!strcmp(a, "--fullscreen")) {
       fullscreen = true;
     } else if (!strcmp(a, "--ui-scale") && i + 1 < argc) {
@@ -3465,9 +2519,12 @@ int main(int argc, char** argv) {
     }
   }
 
-  // Neither of these needs a sim, and --font-sample needs no corpus either.
-  if (font_sample) return FontSample(snapshot);
-  if (ui_sample) return UiSample(snapshot, size_w ? size_w : 1100, size_h ? size_h : 760);
+  // The start-screen sheets need no sim. With a source named, the window sheets follow once
+  // it has been opened, further down.
+  if (ui_sample) {
+    const int rc = UiSample(snapshot);
+    if (rc != 0 || (!corpus && !attach_to)) return rc;
+  }
   // Nor do these two, and that is the point of them: they read what earlier runs wrote, so
   // the two sides of a comparison can be two processes, two DLLs, or two machines.
   if (bisect_a != nullptr) return Bisect(bisect_a, bisect_b);
@@ -3965,7 +3022,7 @@ int main(int argc, char** argv) {
   if (stats) PrintQuantiles(session, view);
   if (probed) Probe(session, probe_x, probe_y, probe_w, probe_h);
 
-  if (windowed) {
+  if (windowed || ui_sample) {
     WindowOptions opt;
     opt.dt = dt;
     opt.mass_fade = mass_fade;
@@ -4004,8 +3061,13 @@ int main(int argc, char** argv) {
     opt.camera.crop_y = crop_y;
     opt.camera.crop_w = crop_w;
     opt.camera.crop_h = crop_h;
+    if (ui_sample) {
+      const int rc = qtui::WindowSample(session, view, opt, snapshot);
+      session.Shutdown();
+      return rc;
+    }
     const int rc = RunWindow(session, view, opt);
-    // The source tab asked for another world. Everything the start screen needs is read out
+    // The source dock asked for another world. Everything the start screen needs is read out
     // BEFORE the shutdown, because a session that has released its DLL is not a session to
     // ask questions of.
     launch::Spec spec;
@@ -4068,31 +3130,22 @@ int main(int argc, char** argv) {
       cspec.crop_y = crop_y;
       cspec.crop_w = crop_w;
       cspec.crop_h = crop_h;
-      Camera cam = SeatCamera(cspec, img.width(), img.height(), fw, fh);
-      HudState hud;
-      hud.dt = dt;
-      hud.mass_fade = mass_fade;
-      hud.seed_pinned = pin_seed;
-      hud.seed = seed;
-      hud.rng = session.RandomState();
-      hud.wall_clock_seeded = session.wall_clock_seeded();
-      hud.attached = session.attached();
-      // The pane renders into a snapshot too, which is the only way it is checkable without a
-      // human at a window -- and `--hud --events=...` is exactly how the offline gate looks at
-      // it.
-      hud.watching_events = session.watching_events();
-      if (hud.attached) {
-        hud.endpoint = session.source().host() + ":" + session.source().port();
-        hud.unity_frame = session.source().unity_frame();
-        hud.poll_bytes = session.source().last_bytes();
-      }
-      if (hovered) {
-        hud.mouse_x = static_cast<int>((hover_x - cam.cx) * cam.scale);
-        hud.mouse_y = static_cast<int>((hover_y - cam.cy) * cam.scale);
-      }
-      Image composed(fw, fh);
-      ComposeFrame(session, view, range, cam, hud, img, &composed);
-      img = composed;
+      WindowOptions sopt;
+      sopt.dt = dt;
+      sopt.mass_fade = mass_fade;
+      sopt.fixed_range = fixed_range;
+      sopt.full_span = full_span;
+      sopt.fixed = range;
+      sopt.seed_pinned = pin_seed;
+      sopt.seed = seed;
+      sopt.corpus = corpus ? corpus : "";
+      sopt.attached = session.attached();
+      if (session.attached())
+        sopt.endpoint = session.source().host() + ":" + session.source().port();
+      sopt.ui_scale = ui_scale;
+      sopt.camera = cspec;
+      img = qtui::ComposeSnapshot(session, view, sopt, fw, fh, hovered ? hover_x : -1,
+                                  hovered ? hover_y : -1);
     } else {
       if (cropped) img = img.Cropped(crop_x, crop_y, crop_w, crop_h);
       if (zoom > 1) img = img.Magnified(zoom);

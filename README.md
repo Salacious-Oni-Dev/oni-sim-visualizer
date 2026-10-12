@@ -1,5 +1,7 @@
 # oni-sim-visualizer
 
+*Oxygen Not Included: now with actual reasons for the oxygen to be not included.*
+
 A standalone visualizer and debugger for the Oxygen Not Included simulation, as provided by
 [oni-sim-replacement](https://github.com/Salacious-Oni-Dev/oni-sim-replacement).
 
@@ -22,19 +24,45 @@ guides are in [oni-sdk-docs](https://github.com/Salacious-Oni-Dev/oni-sdk-docs).
 [Visualizing the simulation](https://github.com/Salacious-Oni-Dev/oni-sdk-docs/blob/main/guides/simviz.md)
 walks through recording a corpus and attaching to a game.
 
+Mods built on the SDK need one of two framework mods, both in the
+[oni-framework-api](https://github.com/Salacious-Oni-Dev/oni-framework-api) release: a mod that uses
+the replacement simulation library needs `OniFramework` together with `OniFramework.Library`, which
+it is built on; a mod that does not needs only `OniFramework.Library` 1.3 or later, and runs on the
+game's own `SimDLL.dll`.
+
+## Alpha 2 (current release)
+
+Alpha 2 (`0.1.0-alpha.2`) moves the window to Qt 6.8.3: docks, menus, a Qt start screen and F1
+reference, text drawn at screen resolution, and playing at the simulation's own speed. The
+showcase videos and screenshots below are recorded on it.
+
+[Changelog](CHANGELOG.md) ·
+[Release notes](https://github.com/Salacious-Oni-Dev/oni-sim-visualizer/releases/tag/v0.1.0-alpha.2) ·
+[What is in Alpha 2, and its known limitations](https://github.com/Salacious-Oni-Dev/oni-sdk-docs/blob/main/NEXT-ALPHA.md#alpha-2)
+
 ## Showcase videos
 
-Click a preview to download the full video from the release.
+Click a preview to download the full video from the release. Both were recorded with this
+release's Qt window and `SimDLL.dll`, on the reference six-asteroid colony.
 
 | preview | what it shows |
 |---|---|
-| [<img src="media/simviz-interactive.gif" width="320" alt="The interactive window">](https://github.com/Salacious-Oni-Dev/oni-sim-visualizer/releases/download/v0.1.0-alpha.1/simviz-interactive.mp4) | **The interactive window** (2 min 38 s)<br>The start screen, where every choice becomes a command line a script can run. Then the views, the panels, stepping and scrubbing backwards through a recorded colony, the hover probe, and tests that run as child processes so the window never freezes. Recorded fullscreen at 2560x1440 with `--font large`. |
-| [<img src="media/simviz-showcase.gif" width="320" alt="Scripted reel">](https://github.com/Salacious-Oni-Dev/oni-sim-visualizer/releases/download/v0.1.0-alpha.1/simviz-showcase.mp4) | **Scripted reel** (37 s)<br>Made offline from `--snapshot` frames, with no window open: a tour of the views, then temperature, phase and element over 500 ticks of a six-asteroid colony, and a zoom into the main asteroid. |
+| [<img src="media/simviz-interactive.gif" width="320" alt="The interactive window">](https://github.com/Salacious-Oni-Dev/oni-sim-visualizer/releases/download/v0.1.0-alpha.2/simviz-interactive.mp4) | **The interactive window** (2 min 50 s)<br>The start screen, where every choice becomes a command line a script can run. Then the views, the docks and the flag behind each control, playing, stepping and scrubbing backwards through a recorded colony, probing cells and the hover card, and a test that runs as a child process while the window keeps drawing. Recorded at 1600x1000 (the world) plus the dock column. |
+| [<img src="media/simviz-showcase.gif" width="320" alt="Scripted reel">](https://github.com/Salacious-Oni-Dev/oni-sim-visualizer/releases/download/v0.1.0-alpha.2/simviz-showcase.mp4) | **Scripted reel** (37 s)<br>Made offline from `--snapshot` frames, with no window open: a tour of the views, then temperature, phase and element over 500 ticks of a six-asteroid colony, and a zoom into the main asteroid. |
+
+## Screenshots
+
+| | |
+|---|---|
+| [<img src="media/screenshot-window.png" width="420" alt="The window with the tools dock and the hover card">](media/screenshot-window.png) | **The window.** The tools dock on the left (probe, stats, digest, state dumps), the world in the temperature view, and the hover card for the cell under the pointer. |
+| [<img src="media/screenshot-help.png" width="420" alt="The help dock with the command line for what is on screen">](media/screenshot-help.png) | **The help dock.** Every key, and the screen as one command line: the same line in a script, on another machine or in a bug report reproduces it. |
+| [<img src="media/screenshot-start.png" width="220" alt="The start screen">](media/screenshot-start.png) | **The start screen** (`simviz.exe` with no arguments). The command line at the bottom follows every choice. |
 
 ## Requirements
 
-- mingw-w64 (`x86_64-w64-mingw32-g++`) and bash, or Windows PowerShell with the WinLibs
-  compiler (see Building on Windows). The program is a Windows x64 executable.
+- Qt 6.8.3 for MinGW 64-bit, the one third-party library (LGPLv3, linked dynamically).
+- The POSIX-threads mingw-w64 (`x86_64-w64-mingw32-g++-posix`) and bash, or Windows PowerShell
+  with Qt's own MinGW 13.1 (see Building on Windows). The program is a Windows x64 executable.
 - A clone of `oni-sim-replacement` beside this repository, built once (its first build
   generates `abi/sim_abi.h` from your installed game).
 - For `--corpus`: a corpus recorded from your own game, and a built `SimDLL.dll`.
@@ -47,11 +75,19 @@ Click a preview to download the full video from the release.
 git clone https://github.com/Salacious-Oni-Dev/oni-sim-replacement
 git clone https://github.com/Salacious-Oni-Dev/oni-sim-visualizer
 (cd oni-sim-replacement && ONI_GAME=/path/to/OxygenNotIncluded ./sim/build.sh)
+python3 -m venv ~/qt/venv && ~/qt/venv/bin/pip install aqtinstall
+~/qt/venv/bin/aqt install-qt windows desktop 6.8.3 win64_mingw -O ~/qt
 (cd oni-sim-visualizer && ./build.sh)
 ```
 
-The output is `build/simviz.exe`. It uses no third-party libraries. If `oni-sim-replacement`
-is somewhere else, set `ONI_SIM_REPO=/path/to/oni-sim-replacement`.
+The output is `build/simviz.exe`, with the three Qt DLLs, the MinGW runtime DLLs Qt needs and
+`platforms/` beside it: everything in `build/` is what the program needs to run, and
+`LICENSES/` holds their licences. `simviz.exe --qt-check` confirms the Qt half loads. If Qt is
+somewhere else, set `ONI_QT=/path/to/6.8.3/mingw_64`; if `oni-sim-replacement` is somewhere
+else, set `ONI_SIM_REPO=/path/to/oni-sim-replacement`.
+
+Qt's MinGW binaries are built with POSIX threads, so the compiler has to be the `-posix` variant
+of mingw-w64 (on Debian and Ubuntu, the `g++-mingw-w64-x86-64-posix` package). No moc and no other Qt tools are needed.
 
 The ABI headers and the offline host code belong to `oni-sim-replacement` and are read from
 it rather than copied here, so this program cannot drift out of step with the library it
@@ -65,10 +101,18 @@ drives.
 #### Tools
 
 ```powershell
-winget install BrechtSanders.WinLibs.POSIX.UCRT   # g++ (MinGW-w64)
-winget install Python.Python.3.12                 # for oni-sim-replacement's first build
+winget install Python.Python.3.12                 # for aqtinstall and oni-sim-replacement's first build
 winget install Git.Git                            # optional
+py -m pip install aqtinstall
+py -m aqt install-qt windows desktop 6.8.3 win64_mingw -O C:\Qt
+py -m aqt install-tool windows desktop tools_mingw1310 qt.tools.win64_mingw1310 -O C:\Qt
 ```
+
+That puts Qt in `C:\Qt\6.8.3\mingw_64` and its MinGW 13.1 compiler in
+`C:\Qt\Tools\mingw1310_64`, where `build.ps1` looks first. The Qt online installer gives the same
+layout: pick Qt 6.8.3 > MinGW 13.1.0 64-bit, and Developer and Designer Tools > MinGW 13.1.0
+64-bit. Use Qt's own MinGW rather than another g++, so the compiler and the Qt DLLs agree on the
+C++ runtime.
 
 Open a new PowerShell window afterwards. Windows does not run PowerShell scripts by default: run
 `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned` once, or use
@@ -87,9 +131,8 @@ powershell -ExecutionPolicy Bypass -File oni-sim-visualizer\build.ps1
 .\oni-sim-visualizer\build\simviz.exe
 ```
 
-Set `$env:ONI_SIM_REPO` if `oni-sim-replacement` is somewhere else. The Windows build adds
-`-static` to the compiler flags so that `simviz.exe` runs without `libwinpthread-1.dll`; the other
-flags are those of `build.sh`.
+Set `$env:ONI_QT` if Qt is somewhere else, and `$env:ONI_SIM_REPO` if `oni-sim-replacement` is.
+The compiler flags and the files copied into `build\` are those of `build.sh`.
 
 ## Recording a corpus
 
@@ -126,11 +169,11 @@ a run is reproducible. Without it, a loaded world seeds from the clock and two r
 command drift apart after a few hundred ticks. `--help` lists every flag, and `F1` in the
 window opens the same reference.
 
-`--font large` draws the panels and HUD in a 7x13 font instead of the default 5x8, for large
-screens; the start screen picks it by itself on a screen 1440 px tall or more. `--ui-scale N`
-(1, 2, 3 or 4) draws the whole window at N times size with sharp pixels, for very high-DPI
-screens; `--size` stays the window size. `--fullscreen` opens the window borderless over the
-whole monitor.
+`--font large` draws the UI text at 15 px instead of the default 12 px; both are the bundled
+DejaVu fonts, so every machine draws the same letters. `--ui-scale N` (1 to 4) draws text at N
+times size: the HUD, the docks and the menus grow, and `--size` stays the world's size. Qt
+already scales by the monitor's own setting on high-DPI screens; this is on top of that.
+`--fullscreen` opens the window borderless over the whole monitor.
 
 From WSL, `127.0.0.1` is not the Windows host. Use the address of the WSL virtual network
 adapter on the Windows side instead.
@@ -188,20 +231,20 @@ repainting the window never moves it.
 
 ### Panels
 
-`tab` opens a column of controls. Each control is one flag, and hovering it shows which. The
-**tools** tab runs every readout against the world on screen (`--probe`, `--stats`,
-`--digest`, `--ext-list`, `--dump-state` and others). The **tests** tab runs the longer
-experiments (`--checkpoint-test`, `--timeline-test`, `--bisect`, `--diff-state` and others)
-as child processes, with their output streaming into the pane. The **help** tab shows the
-command line that reproduces what is on screen, camera included, so a view put together by
-clicking can be handed to a script or a bug report.
+`tab` shows or hides the control panels, which are docks you can move, stack or float. Each
+control is one flag, and hovering it shows which. The **tools** panel runs every readout against
+the world on screen (`--probe`, `--stats`, `--digest`, `--ext-list`, `--dump-state` and others).
+The **tests** panel runs the longer experiments (`--checkpoint-test`, `--timeline-test`,
+`--bisect`, `--diff-state` and others) as child processes, with their output streaming into the
+pane. The **help** panel shows the command line that reproduces what is on screen, camera
+included, so a view put together by clicking can be handed to a script or a bug report.
 
 ## Checking
 
 `test.sh` is the check suite. It runs three kinds of check:
 
 - **Owned**: output this program produces with no simulation involved, such as the help text,
-  the font sheet and sample frames of every panel. These should change only when the program
+  the flag table and sheets of the start screen. These should change only when the program
   does.
 - **Relation**: claims that hold whatever the simulation does and whatever the world's size.
   The cells they use are placed relative to the world the corpus loads, and the one check that
@@ -232,6 +275,7 @@ Mozilla Public License 2.0, see `LICENSE`.
 
 Oxygen Not Included is developed and published by Klei Entertainment. This project is not
 affiliated with or endorsed by Klei.
+How this project follows Klei's modding guidelines, rule by rule: [COMPLIANCE](https://github.com/Salacious-Oni-Dev/oni-sdk-docs/blob/main/COMPLIANCE.md).
 
 Development of this project uses AI coding assistants. All changes are reviewed and released
 by the maintainer.

@@ -11,7 +11,7 @@
 # third week.
 #
 #   OWNED   Things this repo produces on its own, with no simulation anywhere near them: the
-#           flag table, the font sheet, the twelve UI sample frames. Hard goldens. A change
+#           flag table, that Qt loads, the two start-screen sheets. Hard goldens. A change
 #           here is a change somebody made in this repo, so it should be recorded on purpose.
 #
 #   RELATION  Claims of the form "these two things must agree", which stay true no matter what
@@ -258,11 +258,12 @@ TICKS=200
 # Every arm, in order. `--list` prints these and stops.
 ARMS="
 owned.help              the flag table --help prints
+owned.qt                Qt and its platform plugin load from beside the exe
 owned.flagtable         every parsed flag is in the table and every table flag is parsed
 owned.coverage          no flag is reachable only from a command line
-owned.font              the bitmap font sheet
-owned.uisample          the twelve UI sample frames
-owned.uisample.sourcedep  the tools tab reads the source and the tests tab does not
+owned.uisample          the two start-screen sheets (no sim)
+relation.uisample.repro the window sheets come out byte-identical from two runs
+relation.uisample.sourcedep  the tools dock reads the source (attached vs offline)
 relation.determinism    a seeded run reproduces across two processes
 relation.seedworks      two different seeds do not produce the same run
 relation.png            the same seeded run draws the same PNG twice
@@ -294,6 +295,7 @@ pinned.elements         the element table this corpus carries
 pinned.extlist          what registry 1 holds offline
 pinned.extattrs         what registry 2 holds offline
 pinned.attrview         the attr render of sim.molecular_mass
+pinned.uisample         the window, once per dock, plus the flag reference
 "
 
 if [ "$LIST" = 1 ]; then printf '%s\n' "$ARMS"; exit 0; fi
@@ -421,6 +423,15 @@ say "OWNED -- produced by this repo alone, no simulation involved"
 
 golden owned.help "$(sv --help 2>&1 | norm | md5sum | cut -d' ' -f1)"
 
+# Not a golden: the line names the Qt version, which build.sh pins, so a mismatch means the
+# exe and the DLLs beside it came from different Qt installs -- the failure this arm exists for.
+qt_line="$(sv --qt-check 2>&1 | tr -d '\r')"
+if printf '%s' "$qt_line" | grep -qE '^qt 6\.8\.3 platform offscreen grab 160x40$'; then
+  pass "owned.qt ($qt_line)"
+else
+  fail "owned.qt" "--qt-check said: $qt_line"
+fi
+
 # The parser and the table are two lists of the same flags and they drift apart silently:
 # a flag added to one and not the other is either undocumented or documented and dead.
 # Both forms of parse arm count -- strcmp for a plain flag, strncmp for the `=a,b` ones.
@@ -460,44 +471,53 @@ PY
 if [ -z "$missing" ]; then pass "owned.coverage (0 flags without a control)"
 else fail "owned.coverage" "reachable only from a command line: $missing"; fi
 
-sv --font-sample --snapshot "$WORK/font.png" >/dev/null 2>&1
-golden owned.font "$(md5 "$WORK/font.png")"
-
 mkdir -p "$WORK/ui"
 # The exe's own stdout goes to a file rather than to this script's, so that a caller piping
 # the suite into `head` cannot close the pipe under a sample that is still being written --
 # observed once, as an arm that reported 2 frames where every other run reports 12.
+#
+# With no source, --ui-sample writes the start screen only: no sim is involved, so these two
+# are OWNED. The window sheets need a session and are PINNED / RELATION below.
 sv --ui-sample --snapshot "$WORK/ui/ui.png" >"$WORK/uisample.log" 2>&1
 ui_manifest="$(cd "$WORK/ui" && md5sum * 2>/dev/null | sort -k2)"
 ui_count="$(printf '%s\n' "$ui_manifest" | grep -c . )"
-if [ "$ui_count" -lt 12 ]; then
-  fail "owned.uisample" "expected 12 sample frames, got $ui_count:
+if [ "$ui_count" -ne 2 ]; then
+  fail "owned.uisample" "expected 2 start-screen sheets, got $ui_count:
 $(printf '%s\n' "$ui_manifest" | sed 's/^/          /')
         the exe said:
 $(sed 's/^/          /' "$WORK/uisample.log" | tail -5)"
 else
   golden owned.uisample "$(printf '%s\n' "$ui_manifest" | md5sum | cut -d' ' -f1)"
-  # Recorded per frame as well, so a failure names the frame instead of the set.
+  # Recorded per sheet as well, so a failure names the sheet instead of the set.
   while read -r h f; do golden "owned.uisample.$f" "$h"; done <<< "$ui_manifest"
-
-  # Two of the twelve are the same tab drawn against both sources, and which of them moves
-  # is a claim rather than a coincidence. The TOOLS tab must differ: its third list button
-  # reads `events list` attached and `elements` offline. The TESTS tab must NOT: every run
-  # it starts drives a corpus in this process, so a tests tab that changed with the source
-  # would be offering a run it cannot make.
-  ui_md5() { printf '%s\n' "$ui_manifest" | awk -v f="$1" '$2==f{print $1}'; }
-  if [ "$(ui_md5 ui-4.png)" = "$(ui_md5 ui-4-offline.png)" ]; then
-    fail "owned.uisample.sourcedep" "the tools tab renders identically attached and offline, so nothing on it is reading the source"
-  elif [ "$(ui_md5 ui-5.png)" != "$(ui_md5 ui-5-offline.png)" ]; then
-    fail "owned.uisample.sourcedep" "the tests tab changed with the source; every run it starts drives a corpus, so it has nothing to read the source for"
-  else
-    pass "owned.uisample.sourcedep (tools tab moves, tests tab does not)"
-  fi
 fi
 
 # ---------------------------------------------------------------------------- RELATION
 say ""
 say "RELATION -- claims that hold whatever the sim does"
+
+# The window sheets: the whole window once per dock, then the flag reference. Made twice, in
+# two processes. Everything in them -- the docks, the HUD, the world, the output pane -- is
+# this program's arithmetic over a seeded run, so the two must be byte-identical; a sheet that
+# is not is a readout that depends on something other than the session (a clock, an address,
+# a temporary path). Then pinned, since the world half is the sim's.
+ui_win() {
+  mkdir -p "$WORK/$1"
+  sv --corpus "$CORPUS" --dll "$DLL" --seed "$SEED" --ticks 20 --view temperature \
+     --zoom 8 --hover 300,200 --size 1100x760 --ui-sample --snapshot "$WORK/$1/ui.png" \
+     >"$WORK/$1.log" 2>&1
+  (cd "$WORK/$1" && md5sum * 2>/dev/null | grep -v 'launch-' | sort -k2)
+}
+uiw1="$(ui_win uiw1)"
+uiw2="$(ui_win uiw2)"
+uiw_count="$(printf '%s\n' "$uiw1" | grep -c . )"
+if [ "$uiw_count" -ne 15 ]; then
+  fail "relation.uisample.repro" "expected 15 window sheets (7 docks, 7 panels, the reference), got $uiw_count: $(tail -3 "$WORK/uiw1.log")"
+elif [ "$uiw1" != "$uiw2" ]; then
+  fail "relation.uisample.repro" "two runs drew different sheets: $(diff <(echo "$uiw1") <(echo "$uiw2") | grep '^[<>]' | head -4 | tr '\n' ' ')"
+else
+  pass "relation.uisample.repro (15 sheets, two processes, byte-identical)"
+fi
 
 # Two processes, same seed, same corpus. This is the arm the whole suite's sim coverage
 # rests on, and the reason it runs at $TICKS rather than at 5 is that at 5 it passes
@@ -777,6 +797,20 @@ else
   # this stub serves no /extcells route, so the attached side reports them as zero, and that
   # is the correct answer to "the route is missing" rather than a difference in the data.
   # The arm below checks the missing-route case on its own.
+  # The tools dock reads the source: its third list button is `events list` attached and
+  # `elements` offline, and the world mutations exist offline only. Compared on the dock's
+  # contents alone -- the HUD and the world beside it change with the source anyway.
+  mkdir -p "$WORK/uil"
+  sv --attach "127.0.0.1:$PORT" --view temperature --size 1100x760 --ui-sample \
+     --snapshot "$WORK/uil/ui.png" >"$WORK/uil.log" 2>&1
+  if [ ! -s "$WORK/uil/ui-tools-panel.png" ] || [ ! -s "$WORK/uiw1/ui-tools-panel.png" ]; then
+    fail "relation.uisample.sourcedep" "no tools panel sheet: $(tail -3 "$WORK/uil.log")"
+  elif cmp -s "$WORK/uil/ui-tools-panel.png" "$WORK/uiw1/ui-tools-panel.png"; then
+    fail "relation.uisample.sourcedep" "the tools dock renders identically attached and offline, so nothing on it is reading the source"
+  else
+    pass "relation.uisample.sourcedep (the tools dock moves with the source)"
+  fi
+
   dig_strip() { sed -n '/^digest/,/total mass/p' | grep -vE '^  (registry|extCells)' | tail -n +2; }
   off_dig="$(run_off --digest | dig_strip)"
   att_dig="$(sv --attach "127.0.0.1:$PORT" --digest 2>&1 | norm | dig_strip)"
@@ -969,6 +1003,7 @@ pinned pinned.extattrs "$(printf '%s' "$extattrs" | md5sum | cut -d' ' -f1)"
 # corpus's element map, so both inputs are the sim's and a change to either legitimately
 # moves it. `relation.attr.perelement` above is the arm that keeps its teeth when this skips.
 pinned pinned.attrview "$(md5 "$WORK/attr.png")"
+pinned pinned.uisample "$(printf '%s\n' "$uiw1" | md5sum | cut -d' ' -f1)"
 
 # ---------------------------------------------------------------------------- report
 say ""
